@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const MODEL_NAME = 'gemini-2.5-flash'; // Same model as original working project
 
 async function readFormBody(req) {
   if (req.body && typeof req.body === 'string') {
@@ -44,8 +45,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
     const prompt = `
       You are an expert hiring manager and resume coach.
       Review this resume against the provided job description.
@@ -65,22 +64,24 @@ export default async function handler(req, res) {
       ${jobText}
     `;
 
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
     const cleaned = text.replace(/```json|```/g, '').trim();
     const json = JSON.parse(cleaned);
-
     return res.status(200).json(json);
   } catch (error) {
     console.error('Gemini review error:', error);
+    const errorMsg = error?.message || String(error);
     return res.status(500).json({
       matchScore: 0,
       strengths: [],
-      gaps: ['Unable to generate review. Check your Gemini API configuration.'],
+      gaps: [`Unable to generate review: ${errorMsg}`],
       suggestedBullets: [],
       interviewQuestions: [],
       error: 'AI review failed',
+      details: errorMsg,
     });
   }
 }
