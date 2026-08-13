@@ -2,20 +2,35 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
+async function readJsonBody(req) {
+  if (req.body && typeof req.body === 'object') {
+    return req.body;
+  }
+
+  if (typeof req.body === 'string') {
+    return JSON.parse(req.body);
+  }
+
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  const raw = Buffer.concat(chunks).toString('utf8');
+  return raw ? JSON.parse(raw) : {};
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  let payload = req.body;
+  let payload;
 
-  if (!payload) {
-    try {
-      const rawBody = await req.text();
-      payload = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
-      return res.status(400).json({ error: 'Invalid JSON payload.' });
-    }
+  try {
+    payload = await readJsonBody(req);
+  } catch {
+    return res.status(400).json({ error: 'Invalid JSON payload.' });
   }
 
   const { resumeText = '', jobText = '' } = payload || {};
