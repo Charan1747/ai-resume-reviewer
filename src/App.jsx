@@ -37,6 +37,29 @@ const defaultAnalysis = {
   ],
 };
 
+function buildLocalAnalysis(resumeText, jobText) {
+  const result = scoreMatch(resumeText, jobText);
+
+  return {
+    matchScore: result.score,
+    strengths: result.matchedKeywords.length
+      ? [`Matched key skills: ${result.matchedKeywords.join(', ')}`]
+      : ['Add more job-relevant keywords to strengthen keyword overlap.'],
+    gaps: [
+      'Add specific evidence for cloud, CI/CD, TypeScript, and architecture leadership.',
+      'Include measurable impact metrics for deployment and performance improvements.',
+    ],
+    suggestedBullets: [
+      'Built high-impact web applications with React and Node.js, delivering responsive, scalable user experiences across business-critical product features.',
+      'Collaborated with engineering teams to design and ship REST APIs and deployment workflows, improving reliability, maintainability, and release velocity.',
+    ],
+    interviewQuestions: [
+      'How have you used React and Node.js to build and scale real-world product features?',
+      'Can you describe a project where you improved system performance or delivery pipeline quality?',
+    ],
+  };
+}
+
 const stopWords = new Set([
   'the', 'with', 'and', 'for', 'this', 'that', 'from', 'have', 'into', 'your', 'their', 'they', 'them', 'were', 'will', 'good', 'more', 'than', 'been', 'over', 'what', 'when', 'where', 'which', 'must', 'also', 'like', 'does', 'using', 'role', 'ideal', 'candidate', 'experience', 'strong', 'skills', 'resume', 'job', 'description', 'across', 'about', 'after', 'before', 'while', 'within', 'through', 'could', 'should', 'would', 'build', 'built', 'need', 'needs', 'seeking', 'ideal', 'strong', 'plus'
 ]);
@@ -111,29 +134,39 @@ export function scoreMatch(resumeText, jobText) {
 export default function App() {
   const [resumeText, setResumeText] = useState(sampleResume);
   const [jobText, setJobText] = useState(sampleJob);
+  const [analysis, setAnalysis] = useState(() => buildLocalAnalysis(sampleResume, sampleJob));
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const analysis = useMemo(() => {
-    const result = scoreMatch(resumeText, jobText);
+  const localAnalysis = useMemo(() => buildLocalAnalysis(resumeText, jobText), [resumeText, jobText]);
 
-    return {
-      matchScore: result.score,
-      strengths: result.matchedKeywords.length
-        ? [`Matched key skills: ${result.matchedKeywords.join(', ')}`]
-        : ['Add more job-relevant keywords to strengthen keyword overlap.'],
-      gaps: [
-        'Add specific evidence for cloud, CI/CD, TypeScript, and architecture leadership.',
-        'Include measurable impact metrics for deployment and performance improvements.',
-      ],
-      suggestedBullets: [
-        'Built high-impact web applications with React and Node.js, delivering responsive, scalable user experiences across business-critical product features.',
-        'Collaborated with engineering teams to design and ship REST APIs and deployment workflows, improving reliability, maintainability, and release velocity.',
-      ],
-      interviewQuestions: [
-        'How have you used React and Node.js to build and scale real-world product features?',
-        'Can you describe a project where you improved system performance or delivery pipeline quality?',
-      ],
-    };
-  }, [resumeText, jobText]);
+  async function handleReview() {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeText, jobText }),
+      });
+
+      if (!response.ok) {
+        throw new Error('AI review service is unavailable right now.');
+      }
+
+      const data = await response.json();
+      setAnalysis({
+        ...defaultAnalysis,
+        ...data,
+      });
+    } catch (err) {
+      setError(err.message || 'Unable to generate a review.');
+      setAnalysis(localAnalysis);
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   return (
     <div className="page-shell">
@@ -142,7 +175,12 @@ export default function App() {
           <p className="eyebrow">AI career intelligence</p>
           <h1>Resume Reviewer</h1>
         </div>
-        <span className="pill">Gemini + RAG Ready</span>
+        <div className="header-actions">
+          <span className="pill">Gemini + RAG Ready</span>
+          <button className="primary-button" onClick={handleReview} disabled={isLoading}>
+            {isLoading ? 'Reviewing...' : 'Review Resume'}
+          </button>
+        </div>
       </header>
 
       <main className="grid">
@@ -166,6 +204,8 @@ export default function App() {
           />
         </section>
       </main>
+
+      {error ? <p className="error-banner">{error}</p> : null}
 
       <section className="results panel">
         <div className="score-row">
