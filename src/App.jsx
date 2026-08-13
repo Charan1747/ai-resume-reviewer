@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 
 const sampleResume = `
 Senior Software Engineer with 6+ years of experience building scalable web applications and APIs.
@@ -137,8 +137,84 @@ export default function App() {
   const [analysis, setAnalysis] = useState(() => buildLocalAnalysis(sampleResume, sampleJob));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
 
   const localAnalysis = useMemo(() => buildLocalAnalysis(resumeText, jobText), [resumeText, jobText]);
+
+  async function handleFileUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await readFile(file);
+      setResumeText(text);
+    } catch (err) {
+      setError(`Failed to read file: ${err.message}`);
+    }
+  }
+
+  async function readFile(file) {
+    const extension = file.name.split('.').pop().toLowerCase();
+
+    if (extension === 'txt') {
+      return file.text();
+    }
+
+    if (extension === 'pdf') {
+      return await extractPdfText(file);
+    }
+
+    if (extension === 'docx') {
+      return await extractDocxText(file);
+    }
+
+    throw new Error(`Unsupported file type: .${extension}. Supported: .txt, .pdf, .docx`);
+  }
+
+  async function extractPdfText(file) {
+    try {
+      const pdfjs = await import('pdfjs-dist');
+      const pdf = await pdfjs.getDocument(await file.arrayBuffer()).promise;
+      let text = '';
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        text += textContent.items.map((item) => item.str).join(' ') + '\n';
+      }
+
+      return text;
+    } catch (err) {
+      throw new Error('PDF reading not available. Please try .txt or .docx format.');
+    }
+  }
+
+  async function extractDocxText(file) {
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      const loaded = await zip.loadAsync(await file.arrayBuffer());
+      const xmlFile = loaded.file('word/document.xml');
+
+      if (!xmlFile) {
+        throw new Error('Invalid DOCX file structure.');
+      }
+
+      const xmlContent = await xmlFile.async('text');
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
+      const paragraphs = xmlDoc.getElementsByTagName('w:t');
+      let text = '';
+
+      for (let i = 0; i < paragraphs.length; i++) {
+        text += paragraphs[i].textContent + ' ';
+      }
+
+      return text.trim();
+    } catch (err) {
+      throw new Error('DOCX reading failed. Please ensure the file is valid.');
+    }
+  }
 
   async function handleReview() {
     setIsLoading(true);
@@ -178,7 +254,6 @@ export default function App() {
           <h1>Resume Reviewer</h1>
         </div>
         <div className="header-actions">
-          <span className="pill">Gemini + RAG Ready</span>
           <button className="primary-button" onClick={handleReview} disabled={isLoading}>
             {isLoading ? 'Reviewing...' : 'Review Resume'}
           </button>
@@ -188,11 +263,28 @@ export default function App() {
       <main className="grid">
         <section className="panel">
           <h2>1. Resume</h2>
+          <div className="resume-upload-section">
+            <button 
+              className="upload-button"
+              onClick={() => fileInputRef.current?.click()}
+              type="button"
+            >
+              📄 Upload Resume (.txt, .pdf, .docx)
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={handleFileUpload}
+              style={{ display: 'none' }}
+            />
+            <p className="upload-hint">or paste below</p>
+          </div>
           <textarea
             value={resumeText}
             onChange={(e) => setResumeText(e.target.value)}
             rows={14}
-            placeholder="Paste your resume here"
+            placeholder="Paste your resume here or upload a file above"
           />
         </section>
 
