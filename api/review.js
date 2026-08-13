@@ -2,37 +2,22 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-async function readJsonBody(req) {
+async function readFormBody(req) {
+  if (req.body && typeof req.body === 'string') {
+    return new URLSearchParams(req.body);
+  }
+
   if (req.body && typeof req.body === 'object') {
-    return req.body;
+    return new URLSearchParams(Object.entries(req.body).map(([key, value]) => [key, String(value)]));
   }
 
-  if (typeof req.body === 'string') {
-    return JSON.parse(req.body);
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
 
-  return new Promise((resolve, reject) => {
-    let raw = '';
-
-    req.on('data', (chunk) => {
-      raw += chunk.toString();
-    });
-
-    req.on('end', () => {
-      if (!raw) {
-        resolve({});
-        return;
-      }
-
-      try {
-        resolve(JSON.parse(raw));
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    req.on('error', reject);
-  });
+  const raw = Buffer.concat(chunks).toString('utf8');
+  return new URLSearchParams(raw || '');
 }
 
 export default async function handler(req, res) {
@@ -40,19 +25,19 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  console.log('request type', typeof req.body, req.body, 'headers', req.headers);
-
-  let payload;
-
+  let body;
   try {
-    payload = await readJsonBody(req);
-    console.log('parsed payload', payload);
-  } catch (error) {
-    console.error('JSON parse error', error);
-    return res.status(400).json({ error: 'Invalid JSON payload.' });
+    body = await readFormBody(req);
+  } catch {
+    return res.status(400).json({ error: 'Invalid form payload.' });
   }
 
-  const { resumeText = '', jobText = '' } = payload || {};
+  const resumeText = body.get('resumeText') || '';
+  const jobText = body.get('jobText') || '';
+
+  if (!resumeText || !jobText) {
+    return res.status(400).json({ error: 'Both resume text and job description are required.' });
+  }
 
   if (!resumeText || !jobText) {
     return res.status(400).json({ error: 'Both resume text and job description are required.' });

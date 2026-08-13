@@ -145,10 +145,12 @@ export default function App() {
     setError('');
 
     try {
+      const formData = new URLSearchParams({ resumeText, jobText });
+
       const response = await fetch('/api/review', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resumeText, jobText }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: formData.toString(),
       });
 
       if (!response.ok) {
