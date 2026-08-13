@@ -11,13 +11,28 @@ async function readJsonBody(req) {
     return JSON.parse(req.body);
   }
 
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
+  return new Promise((resolve, reject) => {
+    let raw = '';
 
-  const raw = Buffer.concat(chunks).toString('utf8');
-  return raw ? JSON.parse(raw) : {};
+    req.on('data', (chunk) => {
+      raw += chunk.toString();
+    });
+
+    req.on('end', () => {
+      if (!raw) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(raw));
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    req.on('error', reject);
+  });
 }
 
 export default async function handler(req, res) {
