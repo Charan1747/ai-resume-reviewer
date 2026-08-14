@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const MODEL_NAME = 'gemini-2.5-flash'; // Same model as original working project
+const MODEL_NAME = 'gemini-3.6-flash'; // Same model as original working project
 
 async function readFormBody(req) {
   if (req.body && typeof req.body === 'string') {
